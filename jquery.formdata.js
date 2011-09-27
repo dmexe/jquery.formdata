@@ -26,7 +26,7 @@
         },
         append: function(box, images) {
           $.each(images, function(){
-            var reader = new FileReader();
+            var reader = new window.FileReader();
             var f = this;
             reader.onload = (function(ev){
               var img = document.createElement("img");
@@ -83,7 +83,7 @@
             return;
           }
           var options = $.formData.options(form);
-          var fd = new FormData(form);
+          var fd = new window.FormData();
           var d = options.deferred;
 
           this.append(fd, $form);
