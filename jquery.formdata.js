@@ -1,64 +1,40 @@
 (function($) {
     $.formData = {
-      nativeSubmit: function(form) {
-        var options = this.formOptions(form);
-        var fd = new FormData(form);
-        var d = options.deferred;
-
-        var xhr_provider = function() {
-          var xhr = $.ajaxSettings.xhr();
-          if(xhr.upload) {
-            xhr.upload.addEventListener('progress', function(ev){
-              d.list.progress.fireWith(ev, [(ev.loaded / ev.total) * 100]);
-            }, false);
+      NativeImagePreview: {
+        init: function($el) {
+          if (window.FileReader) {
+            var self = this;
+            $el.find("input[type=file]").change(function(ev){
+              self.onChange(this);
+            });
           }
-          return xhr;
-        };
-
-        $.ajax({
-            url:options.url,
-            data:fd,
-            processData:false,
-            type:options.type,
-            xhr: xhr_provider,
-            xhrFields: {
-              setRequestHeader:['Content-Type', '']
-            }
-        }).success(function(){
-            d.list.success.fireWith(this, arguments);
-        }).error(function(){
-            d.list.error.fireWith(this, arguments);
-        }).complete(function(){
-            d.list.complete.fireWith(this, arguments);
-        });
-      },
-
-      formOptions: function(form) {
-        $form = $(form);
-        options = {
-          url: $form.attr("action"),
-          type: $form.attr("method"),
-          deferred: $form.data("jquery.formdata.callbacks")
-        };
-        var opt = $form.data("jquery.formdata.options");
-        if (typeof opt !== 'undefined')  {
-          $.extend(options, opt);
-        }
-        if (options.urlFormat) {
-          options.url = options.url + "." + options.urlFormat;
-        }
-        return options;
-      },
-
-      setupSubmit: function($el) {
-        if (typeof FormData !== 'undefined') {
-          var self = this;
-          $el.submit(function(ev){
-            ev.preventDefault();
-            self.nativeSubmit(this);
+          return (!!window.FileReader);
+        },
+        onChange: function(el){
+          var $el = $(el);
+          var id = $el.attr("id");
+          var boxId = id + "_image_preview";
+          var images = $.grep(el.files, function(i){
+              return i.type.match(/image/);
           });
-        } else {
-          console.log("jquery.formdata: FormData not supported!");
+          if ($("#" + boxId).size() === 0) {
+            $("<div id=\"" + boxId + "\" />").insertAfter($el);
+          }
+          var box = $("#"+ boxId);
+          box.html("");
+          this.append(box.get(0), images);
+        },
+        append: function(box, images) {
+          $.each(images, function(){
+            var reader = new FileReader();
+            var f = this;
+            reader.onload = (function(ev){
+              var img = document.createElement("img");
+              img.src = ev.target.result;
+              box.appendChild(img);
+            });
+            reader.readAsDataURL(f);
+          });
         }
       },
 
@@ -76,13 +52,81 @@
         return this;
       },
 
+      NativeFormData: {
+        init: function($el) {
+          if (window.FormData) {
+            var self = this;
+            $el.submit(function(ev){
+              ev.preventDefault();
+              self.onSubmit(this);
+            });
+          }
+          return !!window.FormData;
+        },
+
+        onSubmit: function(form) {
+          var $form = $(form);
+          if ($form.attr("disabled")) {
+            return;
+          }
+          var options = $.formData.options(form);
+          var fd = new FormData(form);
+          var d = options.deferred;
+
+          var xhr_provider = function() {
+            var xhr = $.ajaxSettings.xhr();
+            if(xhr.upload) {
+              xhr.upload.addEventListener('progress', function(ev){
+                d.list.progress.fireWith(ev, [(ev.loaded / ev.total) * 100]);
+              }, false);
+            }
+            return xhr;
+          };
+
+          $.formData.disableForm($form, true);
+          $.ajax({
+              url:options.url,
+              data:fd,
+              processData:false,
+              contentType:false,
+              type:options.type,
+              xhr: xhr_provider
+          }).success(function(){
+              d.list.success.fireWith(this, arguments);
+          }).error(function(){
+              d.list.error.fireWith(this, arguments);
+          }).complete(function(){
+              $.formData.disableForm($(form), false);
+              d.list.complete.fireWith(this, arguments);
+          });
+        }
+      },
+
+      options: function(form) {
+        $form = $(form);
+        options = {
+          url: $form.attr("action"),
+          type: $form.attr("method"),
+          deferred: $form.data("jquery.formdata.callbacks")
+        };
+        var opt = $form.data("jquery.formdata.options");
+        if (typeof opt !== 'undefined')  {
+          $.extend(options, opt);
+        }
+        if (options.urlFormat) {
+          options.url = options.url + "." + options.urlFormat;
+        }
+        return options;
+      },
+
       init: function(el, options) {
         $el = $(el);
         callbacks = $el.data("jquery.formdata.callbacks");
         if (typeof callbacks === 'undefined') {
           callbacks = new this.Callbacks();
           $el.data("jquery.formdata.callbacks", callbacks);
-          this.setupSubmit($el);
+          this.NativeFormData.init($el);
+          this.NativeImagePreview.init($el);
         }
         if (typeof options === 'object') {
           $(el).data("jquery.formdata.options", options);
@@ -90,12 +134,23 @@
         return callbacks;
       },
 
-      defaultOptions: {}
+      defaultOptions: {},
+      disableForm: function($form, disable) {
+        var its= $form.find("input,select,textarea");
+        if (disable) {
+          its.attr("disabled", "disabled");
+          $form.attr("disabled", "disabled");
+        } else {
+          its.removeAttr("disabled");
+          $form.removeAttr("disabled");
+        }
+      }
     };
 
     $.fn.formData = function(options) {
       return ($.formData.init(this.get(0), options));
     };
+
 })(jQuery);
 
 /*
