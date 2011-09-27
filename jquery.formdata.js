@@ -64,6 +64,19 @@
           return !!window.FormData;
         },
 
+        append: function(fd, $form) {
+          $form.find("input,select,textarea").each(function(){
+            if(this.type === "file" && this.files) {
+              var f = this;
+              $.each(this.files, function(){
+                fd.append(f.name, this);
+              });
+            } else {
+              fd.append(this.name, this.value);
+            }
+          });
+        },
+
         onSubmit: function(form) {
           var $form = $(form);
           if ($form.attr("disabled")) {
@@ -72,6 +85,8 @@
           var options = $.formData.options(form);
           var fd = new FormData(form);
           var d = options.deferred;
+
+          this.append(fd, $form);
 
           var xhr_provider = function() {
             var xhr = $.ajaxSettings.xhr();
