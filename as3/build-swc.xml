@@ -1,0 +1,27 @@
+<!--
+ To build, use
+   mxmlc -load-config=build-swc.xml formdata.as
+
+ That is all.
+-->
+<flex-config>
+  <compiler>
+    <accessible>true</accessible>
+    <debug>true</debug>
+    <external-library-path>
+      <path-element>${flexlib}/libs/player/{targetPlayerMajorVersion}.{targetPlayerMinorVersion}/playerglobal.swc</path-element>
+      <path-element>${flexlib}/libs/framework.swc</path-element>
+    </external-library-path>
+    <source-path>
+      <path-element>.</path-element>
+    </source-path>
+  </compiler>
+  <use-network>true</use-network>
+  <metadata>
+    <creator>Gabriel Handford</creator>
+    <description>http://code.google.com/p/as3httpclientlib/</description>
+    <language>EN</language>
+    <title>AS3 HTTP Client Library</title>
+  </metadata>
+</flex-config>
+
