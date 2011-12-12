@@ -1,6 +1,6 @@
 (function($) {
     var fire = function (el, evName, args){
-      $(el).trigger("jquery:formdata:"+evName, args);
+      $(el).trigger("fd:"+evName, args);
     };
 
     var getOptions = function(form) {
@@ -9,7 +9,7 @@
         url: $form.attr("action"),
         origUrl: $form.attr("action"),
         type: $form.attr("method"),
-        swf: "/assets/swf/formdata.swf?" + new Date().getTime()
+        swf: "/lib/formdata.swf?" + new Date().getTime()
       };
       var opt = $form.data("jquery-formdata-options");
       if (typeof opt !== 'undefined')  {
@@ -32,20 +32,18 @@
       }
     };
 
-    var proxy = function($form){
-      var p = {};
-      var curry = function(ev){
-        return (function(func){
-            $form.bind("jquery:formdata:"+ev, func);
-            return p;
-        });
-      };
-      p.success  = curry("success");
-      p.error    = curry("error");
-      p.complete = curry("complete");
-      p.progress = curry("progress");
-      p.change   = curry("change");
-      return p;
+    var overrideFile = function($file, idx, value) {
+      var values = $file.data("form-data-override") || {};
+      if (typeof value !== 'undefined') {
+        values[idx] = value;
+        $file.data("form-data-override", values);
+        return value;
+      } else {
+        return values[idx];
+      }
+    };
+    var overrideFileClear = function($file) {
+      $file.data("form-data-override", {});
     };
 
     $.formData = {
@@ -102,6 +100,7 @@
             return it;
           });
           var $file = this.getInput(flashVars);
+          overrideFileClear($file);
           this.files($file, f);
           fire($file, "change", [f]);
         },
@@ -118,15 +117,18 @@
           });
           var self = this;
           $("input[type=file]", $form).each(function(){
-              var files = self.files($(this));
+              var $file = $(this);
+              var files = self.files($file);
               var input = this;
               if (files && files.length > 0) {
-                $.each(files, function(){
-                  body += "--" + boundary + nl;
-                  body += "Content-Disposition: form-data; name=\"" + $(input).attr("name") + "\";";
-                  body += " filename=\"" + "base64:" + this.name + "\"" + nl;
-                  body += "Content-Type: " + this.type + nl;
-                  body += nl + this.file + nl;
+                $.each(files, function(idx){
+                  if (overrideFile($file, idx) !== false) {
+                    body += "--" + boundary + nl;
+                    body += "Content-Disposition: form-data; name=\"" + $(input).attr("name") + "\";";
+                    body += " filename=\"" + "base64:" + this.name + "\"" + nl;
+                    body += "Content-Type: " + this.type + nl;
+                    body += nl + this.file + nl;
+                  }
                 });
               }
           });
@@ -157,7 +159,12 @@
         },
 
         flashId: function($file) {
-          return $file.attr("name").replace(/[^a-zA-Z0-9-_]/g, '-').replace(/\-+$/, '') + "-jquery-formdata-flash";
+          var fid = $file.data("flash-id");
+          if (!fid) {
+            fid = $file.attr("name").replace(/[^a-zA-Z0-9-_]/g, '-').replace(/\-+$/, '') + "-jquery-formdata-flash-" + new Date().getTime();
+            $file.data("flash-id", fid);
+          }
+          return fid;
         },
 
         getInput: function(flashVars) {
@@ -204,11 +211,9 @@
         },
 
         createButton: function($file) {
-          $file.hide();
-          var button = this.getButton($file);
           var flash  = this.getFlash($file);
-          flash.css("position", "absolute").width(button.outerWidth()).height(button.outerHeight());
-          flash.offset(button.offset());
+          flash.css("position", "absolute").width($file.outerWidth()).height($file.outerHeight());
+          flash.offset($file.offset());
         },
 
         files: function($file, files) {
@@ -240,6 +245,7 @@
         change: function($file) {
           var result = [];
           var states = [];
+          overrideFileClear($file);
           $.each($file[0].files, function(index){
               var idx = result.push({
                   name:this.name,type:this.type,size:this.size
@@ -267,6 +273,7 @@
           }
 
           fire($form, "submit", []);
+          $("progress", $form).show();
           var o = getOptions($form);
           var d = this.getData($form);
           disableForm($form, true);
@@ -284,6 +291,7 @@
               fire($form, "error", [xhr]);
           }).complete(function(){
               disableForm($form, false);
+              $("progress", $form).hide();
               fire($form, "complete", []);
           });
         },
@@ -294,9 +302,12 @@
               fd.append(this.name, this.value);
           });
           $("input[type=file]", $form).each(function(){
-              var name = $(this).attr("name");
-              $.each(this.files, function(){
-                  fd.append(name, this);
+              var $file = $(this);
+              var name = $file.attr("name");
+              $.each(this.files, function(idx){
+                  if (overrideFile($file, idx) !== false) {
+                    fd.append(name, this);
+                  }
               });
           });
           return fd;
@@ -307,11 +318,20 @@
           if(xhr.upload) {
             xhr.upload.addEventListener('progress',
               function(ev) {
-                fire($form, "progress", [(ev.loaded / ev.total) * 100]);
+                var pr = $("progress", $form);
+                var val = (ev.loaded / ev.total) * 100;
+                if (pr.size() > 0) {
+                  pr.val(val);
+                }
+                fire($form, "progress", [val]);
             });
           }
           return function(){ return xhr; };
         }
+      },
+
+      replace: function(file, idx, value) {
+        overrideFile($(file), idx, value);
       },
 
       init: function($el, opts) {
@@ -326,11 +346,15 @@
       defaultOptions: {}
     };
 
-    $.fn.formData = function(opts) {
+    $.fn.formData = function(opts, a, b, c) {
       this.each(function(){
-          $.formData.init($(this), opts);
+          if (opts === "replace") {
+            $.formData.replace($(this), a, b);
+          } else {
+            $.formData.init($(this), opts);
+          }
       });
-      return proxy(this);
+      return this;
     };
 
 })(jQuery);
